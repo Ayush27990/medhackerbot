@@ -36,18 +36,21 @@ logger = logging.getLogger(__name__)
 # ======================
 # CONFIG
 # ======================
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-GROQ_API_KEY   = os.getenv("GROQ_API_KEY")
-CHANNEL_ID     = os.getenv("CHANNEL_ID")
-ADMIN_ID       = 723919716
-INTERVAL       = 900          # 15 minutes
+TELEGRAM_TOKEN     = os.getenv("TELEGRAM_TOKEN")
+GROQ_API_KEY       = os.getenv("GROQ_API_KEY")
+OBG_CHANNEL_ID     = os.getenv("OBG_CHANNEL_ID")      # OBG questions go here
+SURGERY_CHANNEL_ID = os.getenv("SURGERY_CHANNEL_ID")  # Surgery questions go here
+ADMIN_ID           = 723919716
+INTERVAL           = 900          # 15 minutes
 
 if not TELEGRAM_TOKEN:
     raise ValueError("TELEGRAM_TOKEN missing")
 if not GROQ_API_KEY:
     raise ValueError("GROQ_API_KEY missing")
-if not CHANNEL_ID:
-    raise ValueError("CHANNEL_ID missing")
+if not OBG_CHANNEL_ID:
+    raise ValueError("OBG_CHANNEL_ID missing")
+if not SURGERY_CHANNEL_ID:
+    raise ValueError("SURGERY_CHANNEL_ID missing")
 
 groq_client = Groq(api_key=GROQ_API_KEY)
 
@@ -598,9 +601,11 @@ async def send_for_approval(bot, mcq: dict, source: str,
             options_preview.append(f"{marker}{chr(65+i)}. {opt}")
 
         explanation_preview = mcq["explanation"][:800]
+        channel_label = "🔪 Surgery Channel" if book_context in ("surgery", "surgery_pdf") else "🤰 OBG Channel"
         text = (
             "📋 NEW MCQ FOR APPROVAL\n\n"
-            f"📚 Source: {source}\n\n"
+            f"📚 Source: {source}\n"
+            f"📢 Will post to: {channel_label}\n\n"
             f"{mcq['question']}\n\n"
             + "\n".join(options_preview)
             + f"\n\n💡 Explanation:\n{explanation_preview}"
@@ -622,19 +627,27 @@ async def send_for_approval(bot, mcq: dict, source: str,
 # ======================
 # POST TO CHANNEL
 # ======================
-async def post_to_channel(bot, mcq: dict):
+def resolve_channel(book_context: str) -> str:
+    """Return the correct channel ID based on subject."""
+    surgery_contexts = ("surgery", "surgery_pdf")
+    if book_context in surgery_contexts:
+        return SURGERY_CHANNEL_ID
+    return OBG_CHANNEL_ID   # obg, obg_pdf, or unknown → OBG channel
+
+async def post_to_channel(bot, mcq: dict, book_context: str = None):
+    channel_id = resolve_channel(book_context)
     options_text = [f"{chr(65+i)}. {opt}" for i, opt in enumerate(mcq["options"])]
     text_msg = mcq["question"] + "\n\n" + "\n".join(options_text)
 
     try:
-        await bot.send_message(chat_id=CHANNEL_ID, text=text_msg)
+        await bot.send_message(chat_id=channel_id, text=text_msg)
         await asyncio.sleep(2)
     except Exception as e:
         logger.error(f"Failed to send question text: {e}")
 
     try:
         await bot.send_poll(
-            chat_id=CHANNEL_ID,
+            chat_id=channel_id,
             question=mcq["question"][:300],
             options=[opt[:100] for opt in mcq["options"]],
             type="quiz",
@@ -647,11 +660,11 @@ async def post_to_channel(bot, mcq: dict):
 
     try:
         spoiler = "💡 *Explanation:*\n\n||" + escape_md(mcq["explanation"]) + "||"
-        await bot.send_message(chat_id=CHANNEL_ID, text=spoiler, parse_mode="MarkdownV2")
+        await bot.send_message(chat_id=channel_id, text=spoiler, parse_mode="MarkdownV2")
     except Exception as e:
         logger.error(f"Failed to send explanation (MarkdownV2): {e}")
         try:
-            await bot.send_message(chat_id=CHANNEL_ID,
+            await bot.send_message(chat_id=channel_id,
                                    text="💡 Explanation:\n\n" + mcq["explanation"])
         except Exception as e2:
             logger.error(f"Fallback explanation failed: {e2}")
@@ -733,10 +746,12 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
         await query.edit_message_text("⏳ Posting to channel…")
-        await post_to_channel(context.bot, item["mcq"])
+        book_ctx = item.get("book_context")
+        await post_to_channel(context.bot, item["mcq"], book_context=book_ctx)
         pending_questions.pop(qid, None)
         save_pending()
-        await context.bot.send_message(chat_id=ADMIN_ID, text="✅ Posted to channel!")
+        channel_label = "🔪 Surgery" if book_ctx in ("surgery", "surgery_pdf") else "🤰 OBG"
+        await context.bot.send_message(chat_id=ADMIN_ID, text=f"✅ Posted to {channel_label} channel!")
 
     # ── REJECT ───────────────────────────────────────────────
     elif prefix == "rj":
@@ -1041,6 +1056,8 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"📚 Topics used:         {len(used_topics)}\n"
         f"❓ Questions used:      {len(used_questions)}\n"
         f"🔄 Next subject:        {nxt}\n"
+        f"🤰 OBG channel:         {OBG_CHANNEL_ID}\n"
+        f"🔪 Surgery channel:     {SURGERY_CHANNEL_ID}\n"
         f"🤰 OBG remaining:       {len([t for t in OBG_TOPICS if t not in used_topics])}/{len(OBG_TOPICS)}\n"
         f"🔪 Surgery remaining:   {len([t for t in SURGERY_TOPICS if t not in used_topics])}/{len(SURGERY_TOPICS)}\n"
         f"📖 OBG PDF:             {len(OBG_CHUNKS)} chunks, {len(used_obg_chunks)} used\n"
