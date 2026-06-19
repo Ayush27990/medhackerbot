@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-MEDICINE_GROUP_ID = os.getenv("MEDICINE_GROUP_ID")
+OBG_GROUP_ID = os.getenv("OBG_GROUP_ID")
 ADMIN_ID = 723919716
 INTERVAL = 900
 QUESTIONS_PER_BATCH = 2
@@ -33,75 +33,58 @@ if not TELEGRAM_TOKEN:
     raise ValueError("TELEGRAM_TOKEN missing")
 if not GROQ_API_KEY:
     raise ValueError("GROQ_API_KEY missing")
-if not MEDICINE_GROUP_ID:
-    raise ValueError("MEDICINE_GROUP_ID missing")
+if not OBG_GROUP_ID:
+    raise ValueError("OBG_GROUP_ID missing")
 
 client = Groq(api_key=GROQ_API_KEY)
 pending_batches = {}
 used_topics = []
 
-HARRISON_TOPICS = [
-    "Approach to the patient with chest pain",
-    "Acute coronary syndrome STEMI NSTEMI",
-    "Heart failure systolic diastolic management",
-    "Atrial fibrillation management anticoagulation",
-    "Hypertensive emergency urgency",
-    "Aortic stenosis clinical features management",
-    "Infective endocarditis diagnosis Duke criteria",
-    "Pericarditis and cardiac tamponade",
-    "Pulmonary embolism diagnosis management",
-    "Deep vein thrombosis anticoagulation",
-    "Community acquired pneumonia management",
-    "Tuberculosis diagnosis treatment",
-    "COPD exacerbation management",
-    "Asthma acute severe management",
-    "Pleural effusion causes diagnosis",
-    "Acute respiratory distress syndrome",
-    "Pneumothorax types management",
-    "Peptic ulcer disease H pylori",
-    "Inflammatory bowel disease Crohn ulcerative colitis",
-    "Acute pancreatitis severity management",
-    "Liver cirrhosis complications management",
-    "Hepatitis B C diagnosis treatment",
-    "Acute liver failure causes management",
-    "Acute kidney injury causes management",
-    "Chronic kidney disease complications",
-    "Nephrotic syndrome causes management",
-    "Nephritic syndrome glomerulonephritis",
-    "Diabetic ketoacidosis management",
-    "Hyperosmolar hyperglycemic state",
-    "Hypothyroidism hyperthyroidism management",
-    "Adrenal insufficiency Addison disease",
-    "Cushing syndrome diagnosis",
-    "Diabetes mellitus type 1 type 2 complications",
-    "Hyponatremia hypernatremia management",
-    "Hypokalemia hyperkalemia ECG changes",
-    "Hypercalcemia hypocalcemia causes",
-    "Metabolic acidosis alkalosis approach",
-    "Respiratory acidosis alkalosis approach",
-    "Anemia approach iron deficiency",
-    "Megaloblastic anemia B12 folate",
-    "Hemolytic anemia causes workup",
-    "Sickle cell disease complications",
-    "Thrombocytopenia causes ITP TTP",
-    "Disseminated intravascular coagulation",
-    "Leukemia acute chronic types",
-    "Lymphoma Hodgkin non Hodgkin",
-    "Multiple myeloma diagnosis treatment",
-    "Rheumatoid arthritis diagnosis management",
-    "Systemic lupus erythematosus criteria",
-    "Sepsis septic shock management",
-    "Meningitis bacterial viral management",
-    "Stroke ischemic hemorrhagic management",
-    "Seizures epilepsy management",
-    "Guillain Barre syndrome",
-    "Myasthenia gravis diagnosis treatment",
-    "Parkinson disease management",
-    "HIV AIDS opportunistic infections",
-    "Malaria diagnosis treatment",
-    "Typhoid fever diagnosis treatment",
-    "Dengue fever management",
-    "Approach to fever of unknown origin",
+OBG_TOPICS = [
+    "Normal labor and partograph",
+    "Stages of labor",
+    "Postpartum hemorrhage",
+    "Preeclampsia and eclampsia",
+    "Gestational hypertension",
+    "Gestational diabetes mellitus",
+    "Placenta previa",
+    "Placental abruption",
+    "Ectopic pregnancy",
+    "Molar pregnancy",
+    "Abortion and its management",
+    "Preterm labor",
+    "Premature rupture of membranes",
+    "Fetal distress",
+    "Shoulder dystocia",
+    "Breech presentation",
+    "Multiple pregnancy",
+    "Rh incompatibility",
+    "Anemia in pregnancy",
+    "Hyperemesis gravidarum",
+    "Polyhydramnios",
+    "Oligohydramnios",
+    "Cesarean section indications",
+    "Puerperal sepsis",
+    "Postpartum contraception",
+    "Abnormal uterine bleeding",
+    "Polycystic ovary syndrome",
+    "Endometriosis",
+    "Fibroid uterus",
+    "Adenomyosis",
+    "Infertility evaluation",
+    "Ovulation induction",
+    "Pelvic inflammatory disease",
+    "Cervical cancer screening",
+    "Carcinoma cervix",
+    "Endometrial carcinoma",
+    "Ovarian tumors",
+    "Menopause",
+    "Hormone replacement therapy",
+    "Contraception methods",
+    "Emergency contraception",
+    "Sexually transmitted infections",
+    "Uterovaginal prolapse",
+    "Urinary incontinence"
 ]
 
 def escape_md(text):
@@ -125,14 +108,14 @@ def extract_json(text):
 async def generate_topic():
     used = ", ".join(used_topics[-20:]) if used_topics else "none"
     prompt = (
-        "You are a Harrison Internal Medicine expert.\n\n"
-        "Suggest ONE specific high-yield Internal Medicine topic.\n\n"
+        "You are an Obstetrics and Gynecology expert.\n\n"
+        "Suggest ONE specific high-yield Obstetrics and Gynecology topic.\n\n"
         "Already used (avoid repeating): " + used + "\n\n"
         "Must be:\n"
-        "- From Harrison Principles of Internal Medicine\n"
+        "- From standard OBG textbooks (DC Dutta, Williams Obstetrics, Novak Gynecology)\n"
         "- High yield for NEET PG / USMLE / FMGE\n"
         "- Specific clinical topic\n\n"
-        'Return ONLY JSON: {"topic": "Acute coronary syndrome management"}'
+        'Return ONLY JSON: {"topic": "Preeclampsia and eclampsia"}'
     )
     try:
         response = client.chat.completions.create(
@@ -153,11 +136,11 @@ async def generate_topic():
     except Exception as e:
         logger.error("Topic generation error: " + str(e))
         import random
-        return random.choice(HARRISON_TOPICS)
+        return random.choice(OBG_TOPICS)
 
 async def generate_questions(topic):
     prompt = (
-        "You are a Harrison Internal Medicine expert examiner.\n\n"
+        "You are an OBGYN expert examiner.\n\n"
         "Generate EXACTLY 2 high-yield clinical MCQs about: " + topic + "\n\n"
         "Rules:\n"
         "- Harrison Principles of Internal Medicine style\n"
@@ -192,23 +175,23 @@ async def send_for_approval(bot, questions, topic):
         qid = str(int(time.time()))
         pending_batches[qid] = {"questions": questions, "topic": topic}
 
-        preview = "📋 HARRISON MCQ FOR APPROVAL\n\n"
-        preview += "📚 Topic: " + topic + "\n\n"
+        preview = "ð OBG MCQ FOR APPROVAL\n\n"
+        preview += "ð Topic: " + topic + "\n\n"
 
         for i, q in enumerate(questions):
             preview += "Q" + str(i + 1) + ": " + q["question"] + "\n\n"
             preview += "\n".join(q["options"]) + "\n\n"
-            preview += "✅ Correct: " + q["options"][q["answer_index"]] + "\n\n"
-            preview += "💡 " + q["explanation"] + "\n\n"
-            preview += "─────────────────\n\n"
+            preview += "â Correct: " + q["options"][q["answer_index"]] + "\n\n"
+            preview += "ð¡ " + q["explanation"] + "\n\n"
+            preview += "âââââââââââââââââ\n\n"
 
         keyboard = InlineKeyboardMarkup([
             [
-                InlineKeyboardButton("✅ Approve & Post", callback_data="approve_" + qid),
-                InlineKeyboardButton("❌ Reject", callback_data="reject_" + qid)
+                InlineKeyboardButton("â Approve & Post", callback_data="approve_" + qid),
+                InlineKeyboardButton("â Reject", callback_data="reject_" + qid)
             ],
             [
-                InlineKeyboardButton("🔄 Regenerate", callback_data="regen_" + qid)
+                InlineKeyboardButton("ð Regenerate", callback_data="regen_" + qid)
             ]
         ])
 
@@ -226,9 +209,9 @@ async def send_for_approval(bot, questions, topic):
 
 async def post_to_group(bot, questions, topic):
     try:
-        header = "🏥 HARRISON INTERNAL MEDICINE MCQ\n📚 Topic: " + topic + "\n\n"
+        header = "ð¤° OBGYN MCQ\nð Topic: " + topic + "\n\n"
         await bot.send_message(
-            chat_id=MEDICINE_GROUP_ID,
+            chat_id=OBG_GROUP_ID,
             text=header
         )
         await asyncio.sleep(1)
@@ -236,7 +219,7 @@ async def post_to_group(bot, questions, topic):
         for q in questions:
             text_msg = q["question"] + "\n\n" + "\n".join(q["options"])
             await bot.send_message(
-                chat_id=MEDICINE_GROUP_ID,
+                chat_id=OBG_GROUP_ID,
                 text=text_msg
             )
             await asyncio.sleep(1)
@@ -249,7 +232,7 @@ async def post_to_group(bot, questions, topic):
                     clean_options.append(opt)
 
             await bot.send_poll(
-                chat_id=MEDICINE_GROUP_ID,
+                chat_id=OBG_GROUP_ID,
                 question=q["question"][:300],
                 options=clean_options,
                 type="quiz",
@@ -259,15 +242,15 @@ async def post_to_group(bot, questions, topic):
             await asyncio.sleep(2)
 
             explanation_escaped = escape_md(q["explanation"])
-            spoiler = "💡 Explanation:\n\n||" + explanation_escaped + "||"
+            spoiler = "ð¡ Explanation:\n\n||" + explanation_escaped + "||"
             await bot.send_message(
-                chat_id=MEDICINE_GROUP_ID,
+                chat_id=OBG_GROUP_ID,
                 text=spoiler,
                 parse_mode="MarkdownV2"
             )
             await asyncio.sleep(2)
 
-        logger.info("Posted to medicine group: " + topic)
+        logger.info("Posted to OBG group: " + topic)
     except Exception as e:
         logger.error("Post to group error: " + str(e))
 
@@ -295,19 +278,19 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if item:
             await post_to_group(context.bot, item["questions"], item["topic"])
             pending_batches.pop(qid, None)
-            await query.edit_message_text("✅ Posted to medicine group!")
+            await query.edit_message_text("â Posted to OBG group!")
         else:
-            await query.edit_message_text("❌ Questions expired.")
+            await query.edit_message_text("â Questions expired.")
 
     elif data.startswith("reject_"):
         qid = data.replace("reject_", "")
         pending_batches.pop(qid, None)
-        await query.edit_message_text("❌ Rejected.")
+        await query.edit_message_text("â Rejected.")
 
     elif data.startswith("regen_"):
         qid = data.replace("regen_", "")
         pending_batches.pop(qid, None)
-        await query.edit_message_text("🔄 Regenerating...")
+        await query.edit_message_text("ð Regenerating...")
         topic = await generate_topic()
         questions = await generate_questions(topic)
         if questions:
@@ -315,15 +298,15 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await context.bot.send_message(
                 chat_id=ADMIN_ID,
-                text="❌ Failed to regenerate. Try /postnow"
+                text="â Failed to regenerate. Try /postnow"
             )
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         return
     await update.message.reply_text(
-        "✅ MedHacker Bot Running!\n\n"
-        "Harrison Internal Medicine MCQs\n"
+        "â MedHacker Bot Running!\n\n"
+        "OBGYN MCQs\n"
         "2 questions every 15 minutes\n\n"
         "Commands:\n"
         "/postnow - Generate immediately\n"
@@ -333,16 +316,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def post_now(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         return
-    await update.message.reply_text("⏳ Generating Harrison MCQs... please wait")
+    await update.message.reply_text("â³ Generating Harrison MCQs... please wait")
     await scheduled_job(context)
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         return
     await update.message.reply_text(
-        "✅ Bot is running\n"
-        "📊 Pending approvals: " + str(len(pending_batches)) + "\n"
-        "📚 Topics used: " + str(len(used_topics))
+        "â Bot is running\n"
+        "ð Pending approvals: " + str(len(pending_batches)) + "\n"
+        "ð Topics used: " + str(len(used_topics))
     )
 
 async def error_handler(update, context):
